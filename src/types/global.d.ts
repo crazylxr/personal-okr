@@ -1,4 +1,4 @@
-import { Todo, OKR, Task, Note } from './database';
+import { Todo, OKR, Task, Note, KeyResult } from './database';
 
 declare global {
   interface Window {
@@ -29,6 +29,13 @@ declare global {
         get: (id: number) => Promise<Note | null>;
         create: (note: Omit<Note, 'id' | 'created_at' | 'updated_at'>) => Promise<number>;
         update: (id: number, note: Partial<Note>) => Promise<void>;
+        delete: (id: number) => Promise<void>;
+      };
+      keyResults: {
+        getAll: (okrId?: number) => Promise<KeyResult[]>;
+        get: (id: number) => Promise<KeyResult | null>;
+        create: (keyResult: Omit<KeyResult, 'id' | 'created_at' | 'updated_at'>) => Promise<number>;
+        update: (id: number, keyResult: Partial<KeyResult>) => Promise<void>;
         delete: (id: number) => Promise<void>;
       };
       app: {

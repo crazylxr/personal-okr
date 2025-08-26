@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { Todo, OKR, Task, Note } from '../types/database';
+import { Todo, OKR, Task, Note, KeyResult } from '../types/database';
 
 // 暴露安全的API给渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -39,6 +39,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete: (id: number) => ipcRenderer.invoke('db:deleteNote', id)
   },
 
+  // KeyResult操作
+  keyResults: {
+    getAll: (okrId?: number) => ipcRenderer.invoke('db:getKeyResults', okrId),
+    get: (id: number) => ipcRenderer.invoke('db:getKeyResult', id),
+    create: (keyResult: Omit<KeyResult, 'id' | 'created_at' | 'updated_at'>) => ipcRenderer.invoke('db:createKeyResult', keyResult),
+    update: (id: number, keyResult: Partial<KeyResult>) => ipcRenderer.invoke('db:updateKeyResult', id, keyResult),
+    delete: (id: number) => ipcRenderer.invoke('db:deleteKeyResult', id)
+  },
+
   // WebDAV同步
   webdav: {
     initClient: (config: any) => ipcRenderer.invoke('webdav:initClient', config),
@@ -47,13 +56,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // 应用控制
-  app: {
-    quit: () => ipcRenderer.invoke('app:quit'),
-    minimize: () => ipcRenderer.invoke('app:minimize'),
-    maximize: () => ipcRenderer.invoke('app:maximize'),
-    close: () => ipcRenderer.invoke('app:close')
-  }
-});
+app: {
+      quit: () => ipcRenderer.invoke('app:quit'),
+      minimize: () => ipcRenderer.invoke('app:minimize'),
+      maximize: () => ipcRenderer.invoke('app:maximize'),
+      close: () => ipcRenderer.invoke('app:close'),
+    },
+     window: {
+       startDrag: () => ipcRenderer.invoke('window:startDrag'),
+       stopDrag: () => ipcRenderer.invoke('window:stopDrag'),
+     },
+ });
 
 // 类型声明
 declare global {
@@ -87,16 +100,27 @@ declare global {
         update: (id: number, note: Partial<Note>) => Promise<void>;
         delete: (id: number) => Promise<void>;
       };
+      keyResults: {
+        getAll: (okrId?: number) => Promise<KeyResult[]>;
+        get: (id: number) => Promise<KeyResult | null>;
+        create: (keyResult: Omit<KeyResult, 'id' | 'created_at' | 'updated_at'>) => Promise<number>;
+        update: (id: number, keyResult: Partial<KeyResult>) => Promise<void>;
+        delete: (id: number) => Promise<void>;
+      };
       webdav: {
-        initClient: (config: any) => Promise<{ success: boolean; error?: string }>;
-        testConnection: () => Promise<{ success: boolean; result?: boolean; error?: string }>;
-        syncData: () => Promise<{ success: boolean; data?: any; error?: string }>;
+        initClient: (config: any) => Promise<void>;
+        testConnection: () => Promise<boolean>;
+        syncData: () => Promise<void>;
       };
       app: {
         quit: () => Promise<void>;
         minimize: () => Promise<void>;
         maximize: () => Promise<void>;
         close: () => Promise<void>;
+      };
+      window: {
+        startDrag: () => Promise<void>;
+        stopDrag: () => Promise<void>;
       };
     };
   }

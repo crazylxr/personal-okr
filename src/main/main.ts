@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain } from 'electron';
+import { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen } from 'electron';
 import { join } from 'path';
 import { database } from './database';
 import { databaseService } from './services/databaseService';
@@ -79,14 +79,15 @@ class Application {
         contextIsolation: true,
         preload: join(__dirname, 'preload.js')
       },
-      titleBarStyle: 'hiddenInset',
+      frame: false,
       show: false
     });
 
     // 加载应用
     if (isDev()) {
       this.mainWindow.loadURL('http://localhost:5173');
-      this.mainWindow.webContents.openDevTools();
+      // 注释掉开发者工具，因为它会阻止 -webkit-app-region: drag 工作
+      // this.mainWindow.webContents.openDevTools();
     } else {
       this.mainWindow.loadFile(join(__dirname, '../dist/index.html'));
     }
@@ -158,6 +159,13 @@ class Application {
     ipcMain.handle('db:updateNote', (_, id: number, note) => databaseService.updateNote(id, note));
     ipcMain.handle('db:deleteNote', (_, id: number) => databaseService.deleteNote(id));
 
+    // KeyResult operations
+    ipcMain.handle('db:getKeyResults', (_, okrId?: number) => databaseService.getKeyResults(okrId));
+    ipcMain.handle('db:getKeyResult', (_, id: number) => databaseService.getKeyResult(id));
+    ipcMain.handle('db:createKeyResult', (_, keyResult) => databaseService.createKeyResult(keyResult));
+    ipcMain.handle('db:updateKeyResult', (_, id: number, keyResult) => databaseService.updateKeyResult(id, keyResult));
+    ipcMain.handle('db:deleteKeyResult', (_, id: number) => databaseService.deleteKeyResult(id));
+
     // WebDAV operations
     ipcMain.handle('webdav:initClient', async (_, config: WebDAVConfig) => {
       try {
@@ -205,6 +213,52 @@ class Application {
     ipcMain.handle('app:close', () => {
       const window = BrowserWindow.getFocusedWindow();
       if (window) window.close();
+    });
+
+    // Window drag operations
+    let isDragging = false;
+    let dragStartPosition = { x: 0, y: 0 };
+    let windowStartPosition = { x: 0, y: 0 };
+    let dragInterval: NodeJS.Timeout | null = null;
+
+    ipcMain.handle('window:startDrag', () => {
+      const window = BrowserWindow.getFocusedWindow();
+      if (!window) return;
+      
+      isDragging = true;
+      const winPosition = window.getPosition();
+      windowStartPosition = { x: winPosition[0], y: winPosition[1] };
+      dragStartPosition = screen.getCursorScreenPoint();
+      
+      // Clear existing interval
+      if (dragInterval) {
+        clearInterval(dragInterval);
+      }
+      
+      // Start drag interval with higher frequency for smoother dragging
+      dragInterval = setInterval(() => {
+        if (!isDragging || !window || window.isDestroyed()) {
+          if (dragInterval) {
+            clearInterval(dragInterval);
+            dragInterval = null;
+          }
+          return;
+        }
+        
+        const currentPosition = screen.getCursorScreenPoint();
+        const x = windowStartPosition.x + currentPosition.x - dragStartPosition.x;
+        const y = windowStartPosition.y + currentPosition.y - dragStartPosition.y;
+        
+        window.setPosition(x, y, false); // Remove animation for smoother dragging
+      }, 8); // Higher frequency for smoother dragging (~120fps)
+    });
+
+    ipcMain.handle('window:stopDrag', () => {
+      isDragging = false;
+      if (dragInterval) {
+        clearInterval(dragInterval);
+        dragInterval = null;
+      }
     });
   }
 }

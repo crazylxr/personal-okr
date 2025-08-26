@@ -1,20 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, Input, Button, Switch, message, Divider, Space, Typography } from 'antd';
-import { CloudSyncOutlined, SaveOutlined, ExperimentOutlined } from '@ant-design/icons';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Switch } from '../components/ui/switch';
+import { useToast } from '../components/ui/use-toast';
+import { UpdateIcon, MixIcon, CheckIcon } from '@radix-ui/react-icons';
 import styled from 'styled-components';
 import webdavService, { WebDAVConfig } from '../services/webdavService';
 
 const PageContainer = styled.div`
   padding: 24px;
   max-width: 800px;
+  margin: 0 auto;
+  space-y: 24px;
 `;
 
-const { Title, Text } = Typography;
+const FormGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+`;
 
+const SwitchGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+`;
 
+const ButtonGroup = styled.div`
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+`;
 
 const Settings: React.FC = () => {
-  const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [testLoading, setTestLoading] = useState(false);
   const [config, setConfig] = useState<WebDAVConfig>({
@@ -25,6 +47,7 @@ const Settings: React.FC = () => {
     syncInterval: 30,
     autoSync: false
   });
+  const { toast } = useToast();
 
   useEffect(() => {
     loadConfig();
@@ -32,26 +55,36 @@ const Settings: React.FC = () => {
 
   const loadConfig = async () => {
     try {
-      const savedConfig = localStorage.getItem('webdav-config');
+      const savedConfig = await webdavService.getConfig();
       if (savedConfig) {
-        const parsedConfig = JSON.parse(savedConfig);
-        setConfig(parsedConfig);
-        form.setFieldsValue(parsedConfig);
+        setConfig(savedConfig);
       }
     } catch (error) {
-      console.error('加载WebDAV配置失败:', error);
+      console.error('加载配置失败:', error);
+      toast({
+        title: "错误",
+        description: "加载配置失败",
+        variant: "destructive",
+      });
     }
   };
 
-  const saveConfig = async (values: WebDAVConfig) => {
+  const saveConfig = async () => {
     setLoading(true);
     try {
-      webdavService.updateConfig(values);
-      setConfig(values);
-      message.success('WebDAV配置保存成功');
+      webdavService.updateConfig(config);
+      localStorage.setItem('webdav-config', JSON.stringify(config));
+      toast({
+        title: "成功",
+        description: "配置保存成功",
+      });
     } catch (error) {
-      console.error('保存WebDAV配置失败:', error);
-      message.error('保存配置失败');
+      console.error('保存配置失败:', error);
+      toast({
+        title: "错误",
+        description: "保存配置失败",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -60,19 +93,18 @@ const Settings: React.FC = () => {
   const testConnection = async () => {
     setTestLoading(true);
     try {
-      const values = form.getFieldsValue();
-      if (!values.url || !values.username || !values.password) {
-        message.warning('请填写完整的WebDAV连接信息');
-        return;
-      }
-
-      // 临时更新配置以测试连接
-      webdavService.updateConfig(values);
       await webdavService.testConnection();
-      message.success('WebDAV连接测试成功');
+      toast({
+        title: "成功",
+        description: "WebDAV连接测试成功",
+      });
     } catch (error) {
-      console.error('WebDAV连接测试失败:', error);
-      message.error('连接测试失败，请检查配置信息');
+      console.error('连接测试失败:', error);
+      toast({
+        title: "错误",
+        description: "WebDAV连接测试失败",
+        variant: "destructive",
+      });
     } finally {
       setTestLoading(false);
     }
@@ -80,136 +112,149 @@ const Settings: React.FC = () => {
 
   const triggerSync = async () => {
     try {
-      message.info('开始同步数据...');
       await webdavService.syncData();
-      message.success('数据同步完成');
+      toast({
+        title: "成功",
+        description: "数据同步完成",
+      });
     } catch (error) {
       console.error('同步失败:', error);
-      message.error('数据同步失败');
+      toast({
+        title: "错误",
+        description: "数据同步失败",
+        variant: "destructive",
+      });
     }
+  };
+
+  const handleConfigChange = (field: keyof WebDAVConfig, value: any) => {
+    setConfig(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   return (
     <PageContainer>
-      <Title level={2}>设置</Title>
-      
-      <Card 
-        title={<><CloudSyncOutlined /> WebDAV 同步配置</>}
-        style={{ marginBottom: 24 }}
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={saveConfig}
-          initialValues={config}
-        >
-          <Form.Item
-            name="enabled"
-            valuePropName="checked"
-          >
-            <Switch 
-              checkedChildren="启用" 
-              unCheckedChildren="禁用" 
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UpdateIcon className="h-5 w-5" />
+            WebDAV 同步设置
+          </CardTitle>
+          <CardDescription>
+            配置WebDAV服务器信息，实现数据云端同步
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SwitchGroup>
+            <Switch
+              id="enabled"
+              checked={config.enabled}
+              onCheckedChange={(checked: boolean) => handleConfigChange('enabled', checked)}
             />
-            <Text style={{ marginLeft: 8 }}>启用WebDAV同步</Text>
-          </Form.Item>
+            <Label htmlFor="enabled">启用WebDAV同步</Label>
+          </SwitchGroup>
 
-          <Form.Item
-            label="WebDAV服务器地址"
-            name="url"
-            rules={[
-              { required: true, message: '请输入WebDAV服务器地址' },
-              { type: 'url', message: '请输入有效的URL地址' }
-            ]}
-          >
-            <Input 
+          <FormGroup>
+            <Label htmlFor="url">WebDAV服务器地址 *</Label>
+            <Input
+              id="url"
+              type="url"
               placeholder="https://your-webdav-server.com/dav/"
-              disabled={!form.getFieldValue('enabled')}
+              value={config.url}
+              onChange={(e) => handleConfigChange('url', e.target.value)}
+              disabled={!config.enabled}
             />
-          </Form.Item>
+          </FormGroup>
 
-          <Form.Item
-            label="用户名"
-            name="username"
-            rules={[{ required: true, message: '请输入用户名' }]}
-          >
-            <Input 
+          <FormGroup>
+            <Label htmlFor="username">用户名 *</Label>
+            <Input
+              id="username"
               placeholder="输入WebDAV用户名"
-              disabled={!form.getFieldValue('enabled')}
+              value={config.username}
+              onChange={(e) => handleConfigChange('username', e.target.value)}
+              disabled={!config.enabled}
             />
-          </Form.Item>
+          </FormGroup>
 
-          <Form.Item
-            label="密码"
-            name="password"
-            rules={[{ required: true, message: '请输入密码' }]}
-          >
-            <Input.Password 
+          <FormGroup>
+            <Label htmlFor="password">密码 *</Label>
+            <Input
+              id="password"
+              type="password"
               placeholder="输入WebDAV密码"
-              disabled={!form.getFieldValue('enabled')}
+              value={config.password}
+              onChange={(e) => handleConfigChange('password', e.target.value)}
+              disabled={!config.enabled}
             />
-          </Form.Item>
+          </FormGroup>
 
-          <Form.Item
-            label="同步间隔（分钟）"
-            name="syncInterval"
-            rules={[{ required: true, message: '请输入同步间隔' }]}
-          >
-            <Input 
+          <FormGroup>
+            <Label htmlFor="syncInterval">同步间隔（分钟）*</Label>
+            <Input
+              id="syncInterval"
               type="number"
               min={5}
               max={1440}
               placeholder="30"
-              disabled={!form.getFieldValue('enabled')}
+              value={config.syncInterval}
+              onChange={(e) => handleConfigChange('syncInterval', parseInt(e.target.value) || 30)}
+              disabled={!config.enabled}
             />
-          </Form.Item>
+          </FormGroup>
 
-          <Form.Item
-            name="autoSync"
-            valuePropName="checked"
-          >
-            <Switch 
-              checkedChildren="开启" 
-              unCheckedChildren="关闭"
-              disabled={!form.getFieldValue('enabled')}
+          <SwitchGroup>
+            <Switch
+              id="autoSync"
+              checked={config.autoSync}
+              onCheckedChange={(checked: boolean) => handleConfigChange('autoSync', checked)}
+              disabled={!config.enabled}
             />
-            <Text style={{ marginLeft: 8 }}>自动同步</Text>
-          </Form.Item>
+            <Label htmlFor="autoSync">自动同步</Label>
+          </SwitchGroup>
 
-          <Form.Item>
-            <Space>
-              <Button 
-                type="primary" 
-                htmlType="submit" 
-                loading={loading}
-                icon={<SaveOutlined />}
-              >
-                保存配置
-              </Button>
-              <Button 
-                onClick={testConnection}
-                loading={testLoading}
-                icon={<ExperimentOutlined />}
-                disabled={!form.getFieldValue('enabled')}
-              >
-                测试连接
-              </Button>
-              <Button 
-                onClick={triggerSync}
-                icon={<CloudSyncOutlined />}
-                disabled={!config.enabled}
-              >
-                立即同步
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
+          <ButtonGroup>
+            <Button
+              onClick={saveConfig}
+              disabled={loading}
+              className="flex items-center gap-2"
+            >
+              <CheckIcon className="h-4 w-4" />
+              {loading ? '保存中...' : '保存配置'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={testConnection}
+              disabled={!config.enabled || testLoading}
+              className="flex items-center gap-2"
+            >
+              <MixIcon className="h-4 w-4" />
+              {testLoading ? '测试中...' : '测试连接'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={triggerSync}
+              disabled={!config.enabled}
+              className="flex items-center gap-2"
+            >
+              <UpdateIcon className="h-4 w-4" />
+              立即同步
+            </Button>
+          </ButtonGroup>
+        </CardContent>
       </Card>
 
-      <Card title="其他设置">
-        <Text type="secondary">
-          更多设置功能正在开发中，包括主题设置、快捷键配置等...
-        </Text>
+      <Card>
+        <CardHeader>
+          <CardTitle>其他设置</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            更多设置功能正在开发中，包括主题设置、快捷键配置等...
+          </p>
+        </CardContent>
       </Card>
     </PageContainer>
   );

@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import { Todo, OKR, Task, Note } from '../../types/database';
+import { Todo, OKR, Task, Note, KeyResult } from '../../types/database';
 
 interface DataState {
   todos: Todo[];
   okrs: OKR[];
+  keyResults: KeyResult[];
   tasks: Task[];
   notes: Note[];
   loading: boolean;
@@ -19,9 +20,15 @@ interface DataActions {
   
   // OKR actions
   loadOKRs: () => Promise<void>;
-  createOKR: (okr: Omit<OKR, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  createOKR: (okr: Omit<OKR, 'id' | 'created_at' | 'updated_at'>) => Promise<number>;
   updateOKR: (id: number, updates: Partial<OKR>) => Promise<void>;
   deleteOKR: (id: number) => Promise<void>;
+  
+  // KeyResult actions
+  loadKeyResults: (okrId?: number) => Promise<void>;
+  createKeyResult: (keyResult: Omit<KeyResult, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  updateKeyResult: (id: number, updates: Partial<KeyResult>) => Promise<void>;
+  deleteKeyResult: (id: number) => Promise<void>;
   
   // Task actions
   loadTasks: () => Promise<void>;
@@ -47,6 +54,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
   // Initial state
   todos: [],
   okrs: [],
+  keyResults: [],
   tasks: [],
   notes: [],
   loading: false,
@@ -130,8 +138,10 @@ export const useDataStore = create<DataStore>((set, get) => ({
           loading: false 
         }));
       }
+      return okrId;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to create OKR', loading: false });
+      throw error;
     }
   },
 
@@ -161,6 +171,134 @@ export const useDataStore = create<DataStore>((set, get) => ({
       }));
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to delete OKR', loading: false });
+    }
+  },
+
+  // KeyResult actions
+  loadKeyResults: async (okrId) => {
+    try {
+      set({ loading: true, error: null });
+      const keyResults = await window.electronAPI.keyResults.getAll(okrId);
+      set({ keyResults, loading: false });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to load key results', loading: false });
+    }
+  },
+
+  createKeyResult: async (keyResultData) => {
+    try {
+      set({ loading: true, error: null });
+      const keyResultId = await window.electronAPI.keyResults.create(keyResultData);
+      const newKeyResult = await window.electronAPI.keyResults.get(keyResultId);
+      if (newKeyResult) {
+        const state = get();
+        const updatedKeyResults = [...state.keyResults, newKeyResult];
+        
+        // 计算该 OKR 的所有 KeyResult 的平均进度
+        const okrKeyResults = updatedKeyResults.filter(kr => kr.okr_id === newKeyResult.okr_id);
+        const totalProgress = okrKeyResults.reduce((sum, kr) => sum + kr.progress, 0);
+        const averageProgress = okrKeyResults.length > 0 ? Math.round(totalProgress / okrKeyResults.length) : 0;
+        
+        // 更新对应的 OKR 进度到数据库
+        await window.electronAPI.okrs.update(newKeyResult.okr_id, { progress: averageProgress });
+        
+        // 更新本地状态中的 OKR 进度
+        const updatedOKRs = state.okrs.map(okr => 
+          okr.id === newKeyResult.okr_id 
+            ? { ...okr, progress: averageProgress, updated_at: new Date().toISOString() }
+            : okr
+        );
+        
+        set({
+          keyResults: updatedKeyResults,
+          okrs: updatedOKRs,
+          loading: false
+        });
+      }
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to create key result', loading: false });
+    }
+  },
+
+  updateKeyResult: async (id: number, updates: Partial<KeyResult>) => {
+    try {
+      set({ loading: true, error: null });
+      await window.electronAPI.keyResults.update(id, updates);
+      const updatedKeyResult = await window.electronAPI.keyResults.get(id);
+      
+      if (updatedKeyResult) {
+        const state = get();
+        const updatedKeyResults = state.keyResults.map(kr => 
+          kr.id === id ? updatedKeyResult : kr
+        );
+        
+        // 计算该 OKR 的所有 KeyResult 的平均进度
+        const okrKeyResults = updatedKeyResults.filter(kr => kr.okr_id === updatedKeyResult.okr_id);
+        const totalProgress = okrKeyResults.reduce((sum, kr) => sum + kr.progress, 0);
+        const averageProgress = okrKeyResults.length > 0 ? Math.round(totalProgress / okrKeyResults.length) : 0;
+        
+        // 更新对应的 OKR 进度到数据库
+        await window.electronAPI.okrs.update(updatedKeyResult.okr_id, { progress: averageProgress });
+        
+        // 更新本地状态中的 OKR 进度
+        const updatedOKRs = state.okrs.map(okr => 
+          okr.id === updatedKeyResult.okr_id 
+            ? { ...okr, progress: averageProgress, updated_at: new Date().toISOString() }
+            : okr
+        );
+        
+        set({
+          keyResults: updatedKeyResults,
+          okrs: updatedOKRs,
+          loading: false
+        });
+      }
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to update key result', loading: false });
+      throw error;
+    }
+  },
+
+  deleteKeyResult: async (id) => {
+    try {
+      set({ loading: true, error: null });
+      
+      const state = get();
+      const keyResultToDelete = state.keyResults.find(kr => kr.id === id);
+      
+      await window.electronAPI.keyResults.delete(id);
+      
+      const updatedKeyResults = state.keyResults.filter(kr => kr.id !== id);
+      
+      if (keyResultToDelete) {
+        // 计算该 OKR 的剩余 KeyResult 的平均进度
+        const okrKeyResults = updatedKeyResults.filter(kr => kr.okr_id === keyResultToDelete.okr_id);
+        const totalProgress = okrKeyResults.reduce((sum, kr) => sum + kr.progress, 0);
+        const averageProgress = okrKeyResults.length > 0 ? Math.round(totalProgress / okrKeyResults.length) : 0;
+        
+        // 更新对应的 OKR 进度到数据库
+        await window.electronAPI.okrs.update(keyResultToDelete.okr_id, { progress: averageProgress });
+        
+        // 更新本地状态中的 OKR 进度
+        const updatedOKRs = state.okrs.map(okr => 
+          okr.id === keyResultToDelete.okr_id 
+            ? { ...okr, progress: averageProgress, updated_at: new Date().toISOString() }
+            : okr
+        );
+        
+        set({
+          keyResults: updatedKeyResults,
+          okrs: updatedOKRs,
+          loading: false
+        });
+      } else {
+        set({
+          keyResults: updatedKeyResults,
+          loading: false
+        });
+      }
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to delete key result', loading: false });
     }
   },
 

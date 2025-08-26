@@ -22,16 +22,32 @@ export interface OKR {
   updated_at?: string;
 }
 
+export interface KeyResult {
+  id?: number;
+  okr_id: number;
+  title: string;
+  description?: string;
+  target_value: number;
+  current_value: number;
+  unit: string; // 单位，如 '%', '个', '次' 等
+  progress: number; // 0-100
+  status: 'not_started' | 'in_progress' | 'completed' | 'at_risk';
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Task {
   id?: number;
   okr_id?: number;
+  kr_id?: number; // 关联到关键结果
   title: string;
   description?: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   estimated_hours?: number;
   actual_hours?: number;
   status: 'todo' | 'in_progress' | 'completed' | 'cancelled';
-  due_date?: string;
+  start_date?: string | null;
+  due_date?: string | null;
   tags?: string;
   created_at?: string;
   updated_at?: string;
@@ -60,6 +76,13 @@ export interface DatabaseAPI {
   createOKR: (okr: Omit<OKR, 'id' | 'created_at' | 'updated_at'>) => Promise<number>;
   updateOKR: (id: number, okr: Partial<OKR>) => Promise<void>;
   deleteOKR: (id: number) => Promise<void>;
+  
+  // KeyResult operations
+  getKeyResults: (okrId?: number) => Promise<KeyResult[]>;
+  getKeyResult: (id: number) => Promise<KeyResult | null>;
+  createKeyResult: (keyResult: Omit<KeyResult, 'id' | 'created_at' | 'updated_at'>) => Promise<number>;
+  updateKeyResult: (id: number, keyResult: Partial<KeyResult>) => Promise<void>;
+  deleteKeyResult: (id: number) => Promise<void>;
   
   // Task operations
   getTasks: (okrId?: number) => Promise<Task[]>;

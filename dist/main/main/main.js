@@ -73,13 +73,14 @@ class Application {
                 contextIsolation: true,
                 preload: (0, path_1.join)(__dirname, 'preload.js')
             },
-            titleBarStyle: 'hiddenInset',
+            frame: false,
             show: false
         });
         // 加载应用
         if (isDev()) {
             this.mainWindow.loadURL('http://localhost:5173');
-            this.mainWindow.webContents.openDevTools();
+            // 注释掉开发者工具，因为它会阻止 -webkit-app-region: drag 工作
+            // this.mainWindow.webContents.openDevTools();
         }
         else {
             this.mainWindow.loadFile((0, path_1.join)(__dirname, '../dist/index.html'));
@@ -141,6 +142,12 @@ class Application {
         electron_1.ipcMain.handle('db:createNote', (_, note) => databaseService_1.databaseService.createNote(note));
         electron_1.ipcMain.handle('db:updateNote', (_, id, note) => databaseService_1.databaseService.updateNote(id, note));
         electron_1.ipcMain.handle('db:deleteNote', (_, id) => databaseService_1.databaseService.deleteNote(id));
+        // KeyResult operations
+        electron_1.ipcMain.handle('db:getKeyResults', (_, okrId) => databaseService_1.databaseService.getKeyResults(okrId));
+        electron_1.ipcMain.handle('db:getKeyResult', (_, id) => databaseService_1.databaseService.getKeyResult(id));
+        electron_1.ipcMain.handle('db:createKeyResult', (_, keyResult) => databaseService_1.databaseService.createKeyResult(keyResult));
+        electron_1.ipcMain.handle('db:updateKeyResult', (_, id, keyResult) => databaseService_1.databaseService.updateKeyResult(id, keyResult));
+        electron_1.ipcMain.handle('db:deleteKeyResult', (_, id) => databaseService_1.databaseService.deleteKeyResult(id));
         // WebDAV operations
         electron_1.ipcMain.handle('webdav:initClient', async (_, config) => {
             try {
@@ -191,6 +198,45 @@ class Application {
             const window = electron_1.BrowserWindow.getFocusedWindow();
             if (window)
                 window.close();
+        });
+        // Window drag operations
+        let isDragging = false;
+        let dragStartPosition = { x: 0, y: 0 };
+        let windowStartPosition = { x: 0, y: 0 };
+        let dragInterval = null;
+        electron_1.ipcMain.handle('window:startDrag', () => {
+            const window = electron_1.BrowserWindow.getFocusedWindow();
+            if (!window)
+                return;
+            isDragging = true;
+            const winPosition = window.getPosition();
+            windowStartPosition = { x: winPosition[0], y: winPosition[1] };
+            dragStartPosition = electron_1.screen.getCursorScreenPoint();
+            // Clear existing interval
+            if (dragInterval) {
+                clearInterval(dragInterval);
+            }
+            // Start drag interval with higher frequency for smoother dragging
+            dragInterval = setInterval(() => {
+                if (!isDragging || !window || window.isDestroyed()) {
+                    if (dragInterval) {
+                        clearInterval(dragInterval);
+                        dragInterval = null;
+                    }
+                    return;
+                }
+                const currentPosition = electron_1.screen.getCursorScreenPoint();
+                const x = windowStartPosition.x + currentPosition.x - dragStartPosition.x;
+                const y = windowStartPosition.y + currentPosition.y - dragStartPosition.y;
+                window.setPosition(x, y, false); // Remove animation for smoother dragging
+            }, 8); // Higher frequency for smoother dragging (~120fps)
+        });
+        electron_1.ipcMain.handle('window:stopDrag', () => {
+            isDragging = false;
+            if (dragInterval) {
+                clearInterval(dragInterval);
+                dragInterval = null;
+            }
         });
     }
 }

@@ -52,18 +52,39 @@ class Database {
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )`,
       
-      // Tasks表（关联到OKR的具体任务）
-      `CREATE TABLE IF NOT EXISTS tasks (
+      // KeyResults表（OKR的关键结果）
+      `CREATE TABLE IF NOT EXISTS key_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         okr_id INTEGER NOT NULL,
         title TEXT NOT NULL,
         description TEXT,
-        estimated_hours REAL DEFAULT 0,
-        actual_hours REAL DEFAULT 0,
-        status TEXT CHECK(status IN ('pending', 'in_progress', 'completed')) DEFAULT 'pending',
+        target_value REAL NOT NULL DEFAULT 0,
+        current_value REAL DEFAULT 0,
+        unit TEXT NOT NULL DEFAULT '',
+        progress INTEGER DEFAULT 0 CHECK(progress >= 0 AND progress <= 100),
+        status TEXT CHECK(status IN ('not_started', 'in_progress', 'completed', 'at_risk')) DEFAULT 'not_started',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (okr_id) REFERENCES okrs (id) ON DELETE CASCADE
+      )`,
+      
+      // Tasks表（关联到OKR或KeyResult的具体任务）
+      `CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        okr_id INTEGER,
+        kr_id INTEGER,
+        title TEXT NOT NULL,
+        description TEXT,
+        priority TEXT CHECK(priority IN ('low', 'medium', 'high', 'urgent')) DEFAULT 'medium',
+        estimated_hours REAL DEFAULT 0,
+        actual_hours REAL DEFAULT 0,
+        status TEXT CHECK(status IN ('todo', 'in_progress', 'completed', 'cancelled')) DEFAULT 'todo',
+        due_date TEXT,
+        tags TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (okr_id) REFERENCES okrs (id) ON DELETE CASCADE,
+        FOREIGN KEY (kr_id) REFERENCES key_results (id) ON DELETE CASCADE
       )`,
       
       // Notes表
@@ -87,7 +108,10 @@ class Database {
       'CREATE INDEX IF NOT EXISTS idx_todos_priority ON todos(priority)',
       'CREATE INDEX IF NOT EXISTS idx_todos_due_date ON todos(due_date)',
       'CREATE INDEX IF NOT EXISTS idx_okrs_year_quarter ON okrs(year, quarter)',
+      'CREATE INDEX IF NOT EXISTS idx_key_results_okr_id ON key_results(okr_id)',
+      'CREATE INDEX IF NOT EXISTS idx_key_results_status ON key_results(status)',
       'CREATE INDEX IF NOT EXISTS idx_tasks_okr_id ON tasks(okr_id)',
+      'CREATE INDEX IF NOT EXISTS idx_tasks_kr_id ON tasks(kr_id)',
       'CREATE INDEX IF NOT EXISTS idx_notes_title ON notes(title)'
     ];
 

@@ -1,13 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Input, Card, Tag, Empty, Spin, message, Modal, Button, Space, Typography, Divider } from 'antd';
-import { PlusOutlined, SearchOutlined, TagOutlined, ClockCircleOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import * as Dialog from '@radix-ui/react-dialog';
+import * as AlertDialog from '@radix-ui/react-alert-dialog';
+import { Card, CardContent } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
+import { Textarea } from '../components/ui/textarea';
+import {
+  PlusIcon,
+  MagnifyingGlassIcon,
+  ClockIcon,
+  TrashIcon,
+  Pencil1Icon,
+  Cross2Icon
+} from '@radix-ui/react-icons';
 import { useDataStore } from '../stores/dataStore';
 import { Note } from '../../types/database';
 import styled from 'styled-components';
 import MarkdownPreview from '@uiw/react-markdown-preview';
-
-const { TextArea } = Input;
-const { Text } = Typography;
+import { useToast } from '../hooks/use-toast';
 
 // flomo风格的样式组件
 const FlomoContainer = styled.div`
@@ -22,10 +34,6 @@ const QuickInputCard = styled(Card)`
   margin-bottom: 20px;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  
-  .ant-card-body {
-    padding: 16px;
-  }
 `;
 
 const NoteCard = styled(Card)`
@@ -37,10 +45,6 @@ const NoteCard = styled(Card)`
   &:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     transform: translateY(-1px);
-  }
-  
-  .ant-card-body {
-    padding: 16px;
   }
 `;
 
@@ -126,10 +130,20 @@ const ActionButtons = styled.div`
 
 const SearchContainer = styled.div`
   margin-bottom: 20px;
+  position: relative;
   
-  .ant-input {
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #666;
+    z-index: 1;
+  }
+  
+  input {
     border-radius: 20px;
-    padding: 8px 16px;
+    padding: 8px 16px 8px 40px;
   }
 `;
 
@@ -142,7 +156,8 @@ const Notes: React.FC = () => {
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [editTags, setEditTags] = useState('');
-  const inputRef = useRef<any>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadNotes();
@@ -174,14 +189,14 @@ const Notes: React.FC = () => {
       });
       
       setQuickInput('');
-      message.success('笔记创建成功');
+      toast({ title: '成功', description: '笔记创建成功' });
       
       // 重新聚焦输入框
       setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
     } catch (error) {
-      message.error('创建笔记失败');
+      toast({ title: '错误', description: '创建笔记失败', variant: 'destructive' });
     }
   };
 
@@ -205,7 +220,7 @@ const Notes: React.FC = () => {
   // 更新笔记
   const handleUpdate = async () => {
     if (!editingNote || !editTitle.trim()) {
-      message.error('请输入笔记标题');
+      toast({ title: '错误', description: '请输入笔记标题', variant: 'destructive' });
       return;
     }
 
@@ -224,31 +239,22 @@ const Notes: React.FC = () => {
         tags: tags.join(',')
       });
       
-      message.success('笔记更新成功');
+      toast({ title: '成功', description: '笔记更新成功' });
       setIsEditModalVisible(false);
       setEditingNote(null);
     } catch (error) {
-      message.error('更新笔记失败');
+      toast({ title: '错误', description: '更新笔记失败', variant: 'destructive' });
     }
   };
 
   // 删除笔记
   const handleDelete = async (noteId: number) => {
-    Modal.confirm({
-      title: '确认删除',
-      content: '确定要删除这条笔记吗？',
-      okText: '删除',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: async () => {
-        try {
-          await deleteNote(noteId);
-          message.success('笔记删除成功');
-        } catch (error) {
-          message.error('删除笔记失败');
-        }
-      }
-    });
+    try {
+      await deleteNote(noteId);
+      toast({ title: '成功', description: '笔记删除成功' });
+    } catch (error) {
+      toast({ title: '错误', description: '删除笔记失败', variant: 'destructive' });
+    }
   };
 
   // 过滤和排序笔记
@@ -292,148 +298,183 @@ const Notes: React.FC = () => {
     <FlomoContainer>
       {/* 快速输入区域 */}
       <QuickInputCard>
-        <TextArea
-          ref={inputRef}
-          placeholder="记录想法... 使用 #标签 来分类，按 Cmd/Ctrl + Enter 保存"
-          value={quickInput}
-          onChange={(e) => setQuickInput(e.target.value)}
-          onKeyDown={handleKeyPress}
-          autoSize={{ minRows: 3, maxRows: 6 }}
-          style={{ 
-            border: 'none', 
-            boxShadow: 'none',
-            fontSize: '14px',
-            lineHeight: '1.6'
-          }}
-        />
-        {quickInput.trim() && (
-          <div style={{ marginTop: '12px', textAlign: 'right' }}>
-            <Button 
-              type="primary" 
-              size="small" 
-              icon={<PlusOutlined />}
-              onClick={handleQuickCreate}
-            >
-              保存
-            </Button>
-          </div>
-        )}
+        <CardContent className="p-4">
+          <Textarea
+            ref={inputRef}
+            placeholder="记录想法... 使用 #标签 来分类，按 Cmd/Ctrl + Enter 保存"
+            value={quickInput}
+            onChange={(e) => setQuickInput(e.target.value)}
+            onKeyDown={handleKeyPress}
+            className="min-h-[80px] border-none shadow-none text-sm leading-relaxed resize-none"
+            style={{ fontSize: '14px', lineHeight: '1.6' }}
+          />
+          {quickInput.trim() && (
+            <div className="mt-3 text-right">
+              <Button size="sm" onClick={handleQuickCreate}>
+                <PlusIcon className="w-4 h-4 mr-1" />
+                保存
+              </Button>
+            </div>
+          )}
+        </CardContent>
       </QuickInputCard>
 
       {/* 搜索区域 */}
       <SearchContainer>
+        <MagnifyingGlassIcon className="search-icon w-4 h-4" />
         <Input
           placeholder="搜索笔记..."
-          prefix={<SearchOutlined />}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          allowClear
+          className="pl-10"
         />
       </SearchContainer>
 
       {/* 笔记列表 */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '50px' }}>
-          <Spin size="large" />
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
         </div>
       ) : filteredNotes.length === 0 ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={searchTerm ? '没有找到匹配的笔记' : '开始记录你的第一个想法吧'}
-        />
+        <div className="text-center py-12 text-gray-500">
+          <div className="text-lg mb-2">📝</div>
+          <div>{searchTerm ? '没有找到匹配的笔记' : '开始记录你的第一个想法吧'}</div>
+        </div>
       ) : (
         <div>
           {filteredNotes.map((note) => (
-            <NoteCard key={note.id} size="small">
-              <NoteContent>
-                <MarkdownPreview source={note.content} style={{ background: 'transparent', padding: 0 }} />
-              </NoteContent>
-              
-              <NoteMeta>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                   {note.tags && note.tags.trim() && (
-                     <TagContainer>
-                       {note.tags.split(',').filter(tag => tag.trim()).map((tag, index) => (
-                         <Tag key={index} color="blue" style={{ margin: 0, fontSize: '12px' }}>
-                           #{tag.trim()}
-                         </Tag>
-                       ))}
-                     </TagContainer>
-                   )}
-                   
-                   <Text type="secondary" style={{ fontSize: '12px' }}>
-                     <ClockCircleOutlined style={{ marginRight: '4px' }} />
-                     {formatDate(note.updated_at || note.created_at || '')}
-                   </Text>
-                 </div>
+            <NoteCard key={note.id}>
+              <CardContent className="p-4">
+                <NoteContent>
+                  <MarkdownPreview source={note.content} style={{ background: 'transparent', padding: 0 }} />
+                </NoteContent>
                 
-                <ActionButtons>
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<EditOutlined />}
-                    onClick={() => handleEdit(note)}
-                  />
-                  <Button
-                    type="text"
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => handleDelete(note.id!)}
-                  />
-                </ActionButtons>
-              </NoteMeta>
+                <NoteMeta>
+                  <div className="flex items-center gap-3">
+                     {note.tags && note.tags.trim() && (
+                       <TagContainer>
+                         {note.tags.split(',').filter(tag => tag.trim()).map((tag, index) => (
+                           <Badge key={index} variant="secondary" className="text-xs">
+                             #{tag.trim()}
+                           </Badge>
+                         ))}
+                       </TagContainer>
+                     )}
+                     
+                     <div className="flex items-center text-xs text-gray-500">
+                       <ClockIcon className="w-3 h-3 mr-1" />
+                       {formatDate(note.updated_at || note.created_at || '')}
+                     </div>
+                   </div>
+                  
+                  <ActionButtons>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEdit(note)}
+                    >
+                      <Pencil1Icon className="w-4 h-4" />
+                    </Button>
+                    <AlertDialog.Root>
+                      <AlertDialog.Trigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <TrashIcon className="w-4 h-4" />
+                        </Button>
+                      </AlertDialog.Trigger>
+                      <AlertDialog.Portal>
+                        <AlertDialog.Overlay className="fixed inset-0 bg-black/50" />
+                        <AlertDialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg p-6 w-full max-w-md">
+                          <AlertDialog.Title className="text-lg font-semibold mb-2">
+                            确认删除
+                          </AlertDialog.Title>
+                          <AlertDialog.Description className="text-sm text-gray-600 mb-4">
+                            确定要删除这条笔记吗？此操作无法撤销。
+                          </AlertDialog.Description>
+                          <div className="flex justify-end space-x-2">
+                            <AlertDialog.Cancel asChild>
+                              <Button variant="outline">取消</Button>
+                            </AlertDialog.Cancel>
+                            <AlertDialog.Action asChild>
+                              <Button variant="destructive" onClick={() => handleDelete(note.id!)}>
+                                删除
+                              </Button>
+                            </AlertDialog.Action>
+                          </div>
+                        </AlertDialog.Content>
+                      </AlertDialog.Portal>
+                    </AlertDialog.Root>
+                  </ActionButtons>
+                </NoteMeta>
+              </CardContent>
             </NoteCard>
           ))}
         </div>
       )}
 
       {/* 编辑模态框 */}
-      <Modal
-        title="编辑笔记"
-        open={isEditModalVisible}
-        onOk={handleUpdate}
-        onCancel={() => {
-          setIsEditModalVisible(false);
-          setEditingNote(null);
-        }}
-        okText="更新"
-        cancelText="取消"
-        width={600}
-      >
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
-          <div>
-            <Text strong>标题</Text>
-            <Input
-              placeholder="请输入笔记标题"
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              style={{ marginTop: '8px' }}
-            />
-          </div>
-          
-          <div>
-            <Text strong>内容</Text>
-            <TextArea
-              placeholder="请输入笔记内容"
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              autoSize={{ minRows: 4, maxRows: 10 }}
-              style={{ marginTop: '8px' }}
-            />
-          </div>
-          
-          <div>
-            <Text strong>标签</Text>
-            <Input
-              placeholder="使用 #标签 格式，如：#工作 #学习"
-              value={editTags}
-              onChange={(e) => setEditTags(e.target.value)}
-              style={{ marginTop: '8px' }}
-            />
-          </div>
-        </Space>
-      </Modal>
+      <Dialog.Root open={isEditModalVisible} onOpenChange={setIsEditModalVisible}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+          <Dialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+            <Dialog.Title className="text-lg font-semibold mb-4">
+              编辑笔记
+            </Dialog.Title>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-title" className="text-sm font-medium">
+                  标题
+                </Label>
+                <Input
+                  id="edit-title"
+                  placeholder="请输入笔记标题"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="mt-2"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="edit-content" className="text-sm font-medium">
+                  内容
+                </Label>
+                <Textarea
+                  id="edit-content"
+                  placeholder="请输入笔记内容"
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="mt-2 min-h-[120px]"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="edit-tags" className="text-sm font-medium">
+                  标签
+                </Label>
+                <Input
+                  id="edit-tags"
+                  placeholder="使用 #标签 格式，如：#工作 #学习"
+                  value={editTags}
+                  onChange={(e) => setEditTags(e.target.value)}
+                  className="mt-2"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2 mt-6">
+              <Dialog.Close asChild>
+                <Button variant="outline">取消</Button>
+              </Dialog.Close>
+              <Button onClick={handleUpdate}>
+                更新
+              </Button>
+            </div>
+            <Dialog.Close asChild>
+              <Button variant="ghost" size="sm" className="absolute top-4 right-4">
+                <Cross2Icon className="h-4 w-4" />
+              </Button>
+            </Dialog.Close>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </FlomoContainer>
   );
 };

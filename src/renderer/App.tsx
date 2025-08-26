@@ -1,7 +1,6 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { ConfigProvider, theme } from 'antd';
-import { useThemeStore } from './stores/themeStore';
+import { ThemeProvider } from './components/theme-provider';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Todos from './pages/Todos';
@@ -9,24 +8,11 @@ import OKRs from './pages/OKRs';
 import Tasks from './pages/Tasks';
 import Notes from './pages/Notes';
 import Settings from './pages/Settings';
-import 'antd/dist/reset.css';
 import './index.css';
 
-
-
 function App() {
-  const { isDark } = useThemeStore();
-
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        token: {
-          colorPrimary: '#1890ff',
-          borderRadius: 6,
-        },
-      }}
-    >
+    <ThemeProvider defaultTheme="system" storageKey="okr-manager-theme">
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -37,7 +23,7 @@ function App() {
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>
-    </ConfigProvider>
+    </ThemeProvider>
   );
 }
 

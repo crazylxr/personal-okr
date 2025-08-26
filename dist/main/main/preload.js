@@ -35,6 +35,14 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
         update: (id, note) => electron_1.ipcRenderer.invoke('db:updateNote', id, note),
         delete: (id) => electron_1.ipcRenderer.invoke('db:deleteNote', id)
     },
+    // KeyResult操作
+    keyResults: {
+        getAll: (okrId) => electron_1.ipcRenderer.invoke('db:getKeyResults', okrId),
+        get: (id) => electron_1.ipcRenderer.invoke('db:getKeyResult', id),
+        create: (keyResult) => electron_1.ipcRenderer.invoke('db:createKeyResult', keyResult),
+        update: (id, keyResult) => electron_1.ipcRenderer.invoke('db:updateKeyResult', id, keyResult),
+        delete: (id) => electron_1.ipcRenderer.invoke('db:deleteKeyResult', id)
+    },
     // WebDAV同步
     webdav: {
         initClient: (config) => electron_1.ipcRenderer.invoke('webdav:initClient', config),
@@ -46,6 +54,10 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
         quit: () => electron_1.ipcRenderer.invoke('app:quit'),
         minimize: () => electron_1.ipcRenderer.invoke('app:minimize'),
         maximize: () => electron_1.ipcRenderer.invoke('app:maximize'),
-        close: () => electron_1.ipcRenderer.invoke('app:close')
-    }
+        close: () => electron_1.ipcRenderer.invoke('app:close'),
+    },
+    window: {
+        startDrag: () => electron_1.ipcRenderer.invoke('window:startDrag'),
+        stopDrag: () => electron_1.ipcRenderer.invoke('window:stopDrag'),
+    },
 });
