@@ -29,11 +29,12 @@ jobs:
     - name: Package for ${{ matrix.os }}
       run: npm run dist
       
-    - name: Create Release
+    - name: Upload Release Assets
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/*
+        files: release/*
         draft: false
         prerelease: false
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
