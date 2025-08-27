@@ -4,11 +4,12 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import * as Select from '@radix-ui/react-select';
 import { ChevronDownIcon } from '@radix-ui/react-icons';
 import { Textarea } from '../components/ui/textarea';
-import { useToast } from '../components/ui/use-toast';
-import { UpdateIcon, MixIcon, CheckIcon, GitHubLogoIcon, EyeOpenIcon, EyeClosedIcon, UploadIcon, DownloadIcon, InfoCircledIcon } from '@radix-ui/react-icons';
+import { useToast } from '../hooks/use-toast';
+import { UpdateIcon, MixIcon, CheckIcon, GitHubLogoIcon, EyeOpenIcon, EyeClosedIcon, UploadIcon, DownloadIcon, InfoCircledIcon, FileTextIcon, PlusIcon } from '@radix-ui/react-icons';
 import styled from 'styled-components';
 import webdavService, { WebDAVConfig } from '../services/webdavService';
 import { gitSyncService } from '../services/gitSyncService';
@@ -57,6 +58,8 @@ const Settings: React.FC = () => {
   const [showBackupList, setShowBackupList] = useState(false);
   const [selectedBackup, setSelectedBackup] = useState<string>('');
   const [restoreMode, setRestoreMode] = useState<'database' | 'json' | 'merge'>('json');
+  const [configExportLoading, setConfigExportLoading] = useState(false);
+  const [configImportLoading, setConfigImportLoading] = useState(false);
   const [s3Config, setS3Config] = useState<S3Config>({
     enabled: false,
     accessKeyId: '',
@@ -230,6 +233,14 @@ const Settings: React.FC = () => {
       ...prev,
       [field]: value
     }));
+    
+    // 为重要配置变更添加提示
+    if (field === 'enabled') {
+      toast({
+        title: value ? "WebDAV 已启用" : "WebDAV 已禁用",
+        description: value ? "WebDAV 同步功能已启用" : "WebDAV 同步功能已禁用",
+      });
+    }
   };
 
   const handleS3ConfigChange = (field: keyof S3Config, value: any) => {
@@ -237,6 +248,14 @@ const Settings: React.FC = () => {
       ...prev,
       [field]: value
     }));
+    
+    // 为重要配置变更添加提示
+    if (field === 'enabled') {
+      toast({
+        title: value ? "S3 备份已启用" : "S3 备份已禁用",
+        description: value ? "S3 备份功能已启用" : "S3 备份功能已禁用",
+      });
+    }
   };
 
   const handleS3BackupTypeChange = (type: 'database' | 'json', value: boolean) => {
@@ -247,6 +266,13 @@ const Settings: React.FC = () => {
         [type]: value
       }
     }));
+    
+    // 为备份类型变更添加提示
+    const typeName = type === 'database' ? '数据库文件' : 'JSON 数据';
+    toast({
+      title: value ? `${typeName} 备份已启用` : `${typeName} 备份已禁用`,
+      description: value ? `已启用 ${typeName} 备份功能` : `已禁用 ${typeName} 备份功能`,
+    });
   };
 
   const saveS3Config = async () => {
@@ -478,6 +504,14 @@ const Settings: React.FC = () => {
       ...prev,
       [field]: value
     }));
+    
+    // 为重要配置变更添加提示
+    if (field === 'enabled') {
+      toast({
+        title: value ? "Git 同步已启用" : "Git 同步已禁用",
+        description: value ? "Git 同步功能已启用" : "Git 同步功能已禁用",
+      });
+    }
   };
 
   const handleGitCredentialsChange = (field: string, value: string) => {
@@ -498,6 +532,14 @@ const Settings: React.FC = () => {
         [field]: value
       } as any
     }));
+    
+    // 为代理配置变更添加提示
+    if (field === 'enabled') {
+      toast({
+        title: value ? "Git 代理已启用" : "Git 代理已禁用",
+        description: value ? "Git 代理功能已启用" : "Git 代理功能已禁用",
+      });
+    }
   };
 
   const saveGitConfig = async () => {
@@ -590,6 +632,114 @@ const Settings: React.FC = () => {
     }
   };
 
+  const exportConfig = async () => {
+    setConfigExportLoading(true);
+    try {
+      const configData = {
+        webdav: {
+          ...config,
+          password: '***',
+        },
+        git: {
+          ...gitConfig,
+          credentials: {
+            ...gitConfig.credentials,
+            token: gitConfig.credentials.token ? '***' : '',
+            password: gitConfig.credentials.password ? '***' : '',
+            sshKey: gitConfig.credentials.sshKey ? '***' : '',
+          },
+        },
+        s3: {
+          ...s3Config,
+          accessKeyId: s3Config.accessKeyId ? '***' : '',
+          secretAccessKey: s3Config.secretAccessKey ? '***' : '',
+        },
+        exportDate: new Date().toISOString(),
+        version: '1.0'
+      };
+      
+      const configJson = JSON.stringify(configData, null, 2);
+      const blob = new Blob([configJson], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `personal-okr-config-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "成功",
+        description: "配置文件已导出",
+      });
+    } catch (error) {
+      console.error('导出配置失败:', error);
+      toast({
+        title: "错误",
+        description: "导出配置失败",
+        variant: "destructive",
+      });
+    } finally {
+      setConfigExportLoading(false);
+    }
+  };
+
+  const importConfig = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setConfigImportLoading(true);
+    try {
+      const text = await file.text();
+      const configData = JSON.parse(text);
+      
+      if (!configData.webdav || !configData.git || !configData.s3) {
+        throw new Error('配置文件格式不正确');
+      }
+      
+      setConfig(prev => ({
+        ...configData.webdav,
+        password: prev.password,
+      }));
+      setGitConfig(prev => ({
+        ...configData.git,
+        credentials: {
+          ...configData.git.credentials,
+          token: prev.credentials.token,
+          password: prev.credentials.password,
+          sshKey: prev.credentials.sshKey,
+        },
+      }));
+      setS3Config(prev => ({
+        ...configData.s3,
+        accessKeyId: prev.accessKeyId,
+        secretAccessKey: prev.secretAccessKey,
+      }));
+      
+      await saveConfig();
+      await saveGitConfig();
+      await saveS3Config();
+      
+      toast({
+        title: "成功",
+        description: "配置文件导入成功",
+      });
+      
+      event.target.value = '';
+    } catch (error) {
+      console.error('导入配置失败:', error);
+      toast({
+        title: "错误",
+        description: `导入配置失败: ${(error as Error).message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setConfigImportLoading(false);
+    }
+  };
+
   const testProxyConnection = async () => {
     setProxyTestLoading(true);
     try {
@@ -621,17 +771,42 @@ const Settings: React.FC = () => {
 
   return (
     <PageContainer>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UploadIcon className="h-5 w-5" />
-            S3 备份设置
-          </CardTitle>
-          <CardDescription>
-            配置AWS S3存储服务，实现数据云端备份
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">设置</h1>
+          <p className="text-muted-foreground">
+            配置应用的各种同步和备份选项
+          </p>
+        </div>
+        
+        <Tabs defaultValue="s3" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="s3" className="flex items-center gap-2">
+              <UploadIcon className="h-4 w-4" />
+              S3 备份
+            </TabsTrigger>
+            <TabsTrigger value="webdav" className="flex items-center gap-2">
+              <MixIcon className="h-4 w-4" />
+              WebDAV 同步
+            </TabsTrigger>
+            <TabsTrigger value="git" className="flex items-center gap-2">
+              <GitHubLogoIcon className="h-4 w-4" />
+              Git 同步
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="s3" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UploadIcon className="h-5 w-5" />
+                  S3 备份设置
+                </CardTitle>
+                <CardDescription>
+                  配置AWS S3存储服务，实现数据云端备份
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
           <SwitchGroup>
             <Switch
               id="s3-enabled"
@@ -656,7 +831,13 @@ const Settings: React.FC = () => {
                 variant="ghost"
                 size="sm"
                 className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                onClick={() => setShowAccessKey(!showAccessKey)}
+                onClick={() => {
+                setShowAccessKey(!showAccessKey);
+                toast({
+                  title: !showAccessKey ? "显示 Access Key" : "隐藏 Access Key",
+                  description: !showAccessKey ? "Access Key 现在可见" : "Access Key 现在已隐藏",
+                });
+              }}
                 disabled={!s3Config.enabled}
               >
                 {showAccessKey ? (
@@ -683,7 +864,13 @@ const Settings: React.FC = () => {
                 variant="ghost"
                 size="sm"
                 className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                onClick={() => setShowSecretKey(!showSecretKey)}
+                onClick={() => {
+                setShowSecretKey(!showSecretKey);
+                toast({
+                  title: !showSecretKey ? "显示 Secret Key" : "隐藏 Secret Key",
+                  description: !showSecretKey ? "Secret Key 现在可见" : "Secret Key 现在已隐藏",
+                });
+              }}
                 disabled={!s3Config.enabled}
               >
                 {showSecretKey ? (
@@ -767,7 +954,13 @@ const Settings: React.FC = () => {
             <Switch
               id="s3-auto-backup"
               checked={s3Config.autoBackup}
-              onCheckedChange={(checked: boolean) => handleS3ConfigChange('autoBackup', checked)}
+              onCheckedChange={(checked: boolean) => {
+                handleS3ConfigChange('autoBackup', checked);
+                toast({
+                  title: checked ? "S3 自动备份已启用" : "S3 自动备份已禁用",
+                  description: checked ? "将自动备份到 S3 存储" : "已停止 S3 自动备份",
+                });
+              }}
               disabled={!s3Config.enabled}
             />
             <Label htmlFor="s3-auto-backup">自动备份</Label>
@@ -777,7 +970,13 @@ const Settings: React.FC = () => {
             <Switch
               id="s3-compression"
               checked={s3Config.compression}
-              onCheckedChange={(checked: boolean) => handleS3ConfigChange('compression', checked)}
+              onCheckedChange={(checked: boolean) => {
+                handleS3ConfigChange('compression', checked);
+                toast({
+                  title: checked ? "S3 压缩备份已启用" : "S3 压缩备份已禁用",
+                  description: checked ? "备份文件将被压缩以节省空间" : "备份文件将不被压缩",
+                });
+              }}
               disabled={!s3Config.enabled}
             />
             <Label htmlFor="s3-compression">压缩备份</Label>
@@ -787,7 +986,13 @@ const Settings: React.FC = () => {
             <Switch
               id="s3-encryption"
               checked={s3Config.encryption}
-              onCheckedChange={(checked: boolean) => handleS3ConfigChange('encryption', checked)}
+              onCheckedChange={(checked: boolean) => {
+                handleS3ConfigChange('encryption', checked);
+                toast({
+                  title: checked ? "S3 加密备份已启用" : "S3 加密备份已禁用",
+                  description: checked ? "备份文件将被加密保护" : "备份文件将不被加密",
+                });
+              }}
               disabled={!s3Config.enabled}
             />
             <Label htmlFor="s3-encryption">加密备份</Label>
@@ -952,6 +1157,10 @@ const Settings: React.FC = () => {
                           onClick={() => {
                             setShowBackupList(false);
                             setSelectedBackup('');
+                            toast({
+                              title: "已取消",
+                              description: "已取消数据恢复操作",
+                            });
                           }}
                         >
                           取消
@@ -965,17 +1174,19 @@ const Settings: React.FC = () => {
           </div>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UpdateIcon className="h-5 w-5" />
-            WebDAV 同步设置
-          </CardTitle>
-          <CardDescription>
-            配置WebDAV服务器信息，实现数据云端同步
-          </CardDescription>
-        </CardHeader>
+          </TabsContent>
+          
+          <TabsContent value="webdav" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UpdateIcon className="h-5 w-5" />
+                  WebDAV 同步设置
+                </CardTitle>
+                <CardDescription>
+                  配置WebDAV服务器信息，实现数据云端同步
+                </CardDescription>
+              </CardHeader>
         <CardContent>
           <SwitchGroup>
             <Switch
@@ -1039,7 +1250,13 @@ const Settings: React.FC = () => {
             <Switch
               id="autoSync"
               checked={config.autoSync}
-              onCheckedChange={(checked: boolean) => handleConfigChange('autoSync', checked)}
+              onCheckedChange={(checked: boolean) => {
+                handleConfigChange('autoSync', checked);
+                toast({
+                  title: checked ? "WebDAV 自动同步已启用" : "WebDAV 自动同步已禁用",
+                  description: checked ? "将自动同步数据到 WebDAV 服务器" : "已停止 WebDAV 自动同步",
+                });
+              }}
               disabled={!config.enabled}
             />
             <Label htmlFor="autoSync">自动同步</Label>
@@ -1075,17 +1292,19 @@ const Settings: React.FC = () => {
           </ButtonGroup>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <GitHubLogoIcon className="h-5 w-5" />
-            Git 同步设置
-          </CardTitle>
-          <CardDescription>
-            配置Git仓库信息，实现版本控制和数据同步
-          </CardDescription>
-        </CardHeader>
+          </TabsContent>
+          
+          <TabsContent value="git" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <GitHubLogoIcon className="h-5 w-5" />
+                  Git 同步设置
+                </CardTitle>
+                <CardDescription>
+                  配置Git仓库信息，实现版本控制和数据同步
+                </CardDescription>
+              </CardHeader>
         <CardContent>
           <SwitchGroup>
             <Switch
@@ -1100,7 +1319,13 @@ const Settings: React.FC = () => {
             <Switch
               id="git-auto-create"
               checked={gitConfig.autoCreateRepo || false}
-              onCheckedChange={(checked: boolean) => handleGitConfigChange('autoCreateRepo', checked)}
+              onCheckedChange={(checked: boolean) => {
+                handleGitConfigChange('autoCreateRepo', checked);
+                toast({
+                  title: checked ? "自动创建仓库已启用" : "自动创建仓库已禁用",
+                  description: checked ? "保存配置时将自动创建远程仓库" : "需要手动提供远程仓库地址",
+                });
+              }}
               disabled={!gitConfig.enabled}
             />
             <Label htmlFor="git-auto-create">自动创建私有仓库</Label>
@@ -1254,7 +1479,13 @@ const Settings: React.FC = () => {
                   variant="ghost"
                   size="icon"
                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                  onClick={() => setShowToken(!showToken)}
+                  onClick={() => {
+                    setShowToken(!showToken);
+                    toast({
+                      title: !showToken ? "显示 Token" : "隐藏 Token",
+                      description: !showToken ? "Token 现在可见" : "Token 现在已隐藏",
+                    });
+                  }}
                   disabled={!gitConfig.enabled}
                 >
                   {showToken ? (
@@ -1313,7 +1544,13 @@ const Settings: React.FC = () => {
               <Switch
                 id="git-proxy-enabled"
                 checked={gitConfig.proxy?.enabled || false}
-                onCheckedChange={(checked: boolean) => handleGitProxyChange('enabled', checked)}
+                onCheckedChange={(checked: boolean) => {
+                    handleGitProxyChange('enabled', checked);
+                    toast({
+                      title: checked ? "Git 代理已启用" : "Git 代理已禁用",
+                      description: checked ? "将通过代理服务器连接 Git" : "已禁用 Git 代理连接",
+                    });
+                  }}
                 disabled={!gitConfig.enabled}
               />
               <Label htmlFor="git-proxy-enabled">启用代理</Label>
@@ -1431,7 +1668,13 @@ const Settings: React.FC = () => {
             <Switch
               id="git-auto-sync"
               checked={gitConfig.autoSync}
-              onCheckedChange={(checked: boolean) => handleGitConfigChange('autoSync', checked)}
+              onCheckedChange={(checked: boolean) => {
+                handleGitConfigChange('autoSync', checked);
+                toast({
+                  title: checked ? "Git 自动同步已启用" : "Git 自动同步已禁用",
+                  description: checked ? "将自动同步数据到 Git 仓库" : "已停止 Git 自动同步",
+                });
+              }}
               disabled={!gitConfig.enabled}
             />
             <Label htmlFor="git-auto-sync">自动同步</Label>
@@ -1467,17 +1710,72 @@ const Settings: React.FC = () => {
           </ButtonGroup>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>其他设置</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            更多设置功能正在开发中，包括主题设置、快捷键配置等...
-          </p>
-        </CardContent>
-      </Card>
+          </TabsContent>
+        </Tabs>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileTextIcon className="h-5 w-5" />
+              配置导入导出
+            </CardTitle>
+            <CardDescription>
+              导入和导出配置文件，方便在不同电脑间同步配置
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
+                <InfoCircledIcon className="h-4 w-4 text-blue-600" />
+                <p className="text-sm text-blue-800">
+                  导出配置文件包含所有同步设置，可在其他电脑上导入使用
+                </p>
+              </div>
+              
+              <ButtonGroup>
+                <Button
+                  onClick={exportConfig}
+                  disabled={configExportLoading}
+                  className="flex items-center gap-2"
+                >
+                  <DownloadIcon className="h-4 w-4" />
+                  {configExportLoading ? '导出中...' : '导出配置'}
+                </Button>
+                
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={importConfig}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                    disabled={configImportLoading}
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={configImportLoading}
+                    className="flex items-center gap-2"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    {configImportLoading ? '导入中...' : '导入配置'}
+                  </Button>
+                </div>
+              </ButtonGroup>
+              
+              <div className="text-sm text-muted-foreground mt-4">
+                <p><strong>配置文件包含：</strong></p>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  <li>S3 备份配置（不含敏感信息）</li>
+                  <li>WebDAV 同步配置（不含敏感信息）</li>
+                  <li>Git 同步配置（不含敏感信息）</li>
+                </ul>
+                <p className="mt-2 text-yellow-600">
+                  <strong>注意：</strong>密码和密钥等敏感信息不会导出，导入后需要重新配置
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </PageContainer>
   );
 };

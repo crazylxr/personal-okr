@@ -8,6 +8,7 @@ import OKRs from './pages/OKRs';
 import Tasks from './pages/Tasks';
 import Notes from './pages/Notes';
 import Settings from './pages/Settings';
+import { Toaster } from './components/ui/toaster';
 import './index.css';
 
 function App() {
@@ -23,6 +24,7 @@ function App() {
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>
+      <Toaster />
     </ThemeProvider>
   );
 }
