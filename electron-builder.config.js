@@ -1,5 +1,5 @@
 module.exports = {
-  appId: 'com.personal.okr-manager',
+  appId: 'com.personal-okr-manager',
   productName: 'Personal OKR Manager',
   directories: {
     output: 'release'
@@ -10,27 +10,21 @@ module.exports = {
   ],
   mac: {
     category: 'public.app-category.productivity',
-    target: [
-      {
-        target: 'dmg',
-        arch: ['x64', 'arm64']
-      }
-    ]
+    target: 'dmg'
   },
   win: {
-    target: [
-      {
-        target: 'nsis',
-        arch: ['x64']
-      }
-    ]
+    target: 'nsis'
   },
   linux: {
-    target: [
-      {
-        target: 'AppImage',
-        arch: ['x64']
-      }
-    ]
+    target: 'AppImage'
+  },
+  nsis: {
+    oneClick: false,
+    allowToChangeInstallationDirectory: true
+  },
+  publish: {
+    provider: 'github',
+    owner: 'crazylxr',
+    repo: 'personal-okr'
   }
 };
