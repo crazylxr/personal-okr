@@ -116,8 +116,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.ico",
-      "publisherName": "Personal OKR Manager"
+      "icon": "assets/icon.ico"
     },
     "linux": {
       "target": [
