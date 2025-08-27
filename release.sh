@@ -17,8 +17,8 @@ echo "📦 当前版本: $CURRENT_VERSION"
 read -p "请输入新版本号 (当前: $CURRENT_VERSION): " NEW_VERSION
 
 if [ -z "$NEW_VERSION" ]; then
-    echo "❌ 版本号不能为空"
-    exit 1
+    echo "⚠️  未输入版本号，使用默认版本: 1.0.1"
+    NEW_VERSION="1.0.1"
 fi
 
 # 询问发布平台
