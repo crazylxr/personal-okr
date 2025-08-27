@@ -136,9 +136,9 @@ class DatabaseService implements DatabaseAPI {
 
   async createTask(task: Omit<Task, 'id' | 'created_at' | 'updated_at'>): Promise<number> {
     const result = await database.run(
-      `INSERT INTO tasks (okr_id, kr_id, title, description, priority, estimated_hours, actual_hours, status, start_date, due_date, tags, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-      [task.okr_id, task.kr_id, task.title, task.description, task.priority, task.estimated_hours, task.actual_hours, task.status, task.start_date, task.due_date, task.tags]
+      `INSERT INTO tasks (okr_id, kr_id, title, description, priority, estimated_hours, actual_hours, status, due_date, tags, updated_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [task.okr_id, task.kr_id, task.title, task.description, task.priority, task.estimated_hours, task.actual_hours, task.status, task.due_date, task.tags]
     );
     return result.lastID!;
   }
@@ -179,10 +179,7 @@ class DatabaseService implements DatabaseAPI {
       fields.push('status = ?');
       values.push(task.status);
     }
-    if (task.start_date !== undefined) {
-      fields.push('start_date = ?');
-      values.push(task.start_date);
-    }
+
     if (task.due_date !== undefined) {
       fields.push('due_date = ?');
       values.push(task.due_date);

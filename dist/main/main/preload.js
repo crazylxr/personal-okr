@@ -49,6 +49,34 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
         testConnection: () => electron_1.ipcRenderer.invoke('webdav:testConnection'),
         syncData: () => electron_1.ipcRenderer.invoke('webdav:syncData')
     },
+    // Git同步
+    git: {
+        createRepository: (config) => electron_1.ipcRenderer.invoke('git:createRepository', config),
+        initRepository: (config) => electron_1.ipcRenderer.invoke('git:initRepository', config),
+        testConnection: () => electron_1.ipcRenderer.invoke('git:testConnection'),
+        testProxyConnection: (proxyConfig) => electron_1.ipcRenderer.invoke('git:testProxyConnection', proxyConfig),
+        syncData: () => electron_1.ipcRenderer.invoke('git:syncData'),
+        exportData: () => electron_1.ipcRenderer.invoke('git:exportData'),
+        commitChanges: (message) => electron_1.ipcRenderer.invoke('git:commitChanges', message),
+        pushChanges: () => electron_1.ipcRenderer.invoke('git:pushChanges'),
+        pullChanges: () => electron_1.ipcRenderer.invoke('git:pullChanges'),
+        getStatus: () => electron_1.ipcRenderer.invoke('git:getStatus')
+    },
+    // S3备份
+    s3: {
+        initialize: (config) => electron_1.ipcRenderer.invoke('s3:initialize', config),
+        testConnection: () => electron_1.ipcRenderer.invoke('s3:testConnection'),
+        performBackup: () => electron_1.ipcRenderer.invoke('s3:performBackup'),
+        getBackupList: () => electron_1.ipcRenderer.invoke('s3:getBackupList'),
+        getStatus: () => electron_1.ipcRenderer.invoke('s3:getStatus'),
+        startAutoBackup: () => electron_1.ipcRenderer.invoke('s3:startAutoBackup'),
+        stopAutoBackup: () => electron_1.ipcRenderer.invoke('s3:stopAutoBackup'),
+        updateConfig: (config) => electron_1.ipcRenderer.invoke('s3:updateConfig', config),
+        performRestore: (key, mode) => electron_1.ipcRenderer.invoke('s3:performRestore', key, mode),
+        getBackupDetails: (key) => electron_1.ipcRenderer.invoke('s3:getBackupDetails', key),
+    },
+    // 通用方法
+    invokeS3Action: (action, ...args) => electron_1.ipcRenderer.invoke(`s3:${action}`, ...args),
     // 应用控制
     app: {
         quit: () => electron_1.ipcRenderer.invoke('app:quit'),

@@ -4,9 +4,18 @@ exports.seedDatabase = seedDatabase;
 const databaseService_1 = require("./services/databaseService");
 async function seedDatabase() {
     try {
-        // 检查是否已有数据
-        const existingTodos = await databaseService_1.databaseService.getTodos();
-        const existingOKRs = await databaseService_1.databaseService.getOKRs();
+        // 等待一小段时间确保数据库表完全创建
+        await new Promise(resolve => setTimeout(resolve, 500));
+        // 检查是否已有数据 - 使用更安全的方式
+        let existingTodos = [];
+        let existingOKRs = [];
+        try {
+            existingTodos = await databaseService_1.databaseService.getTodos();
+            existingOKRs = await databaseService_1.databaseService.getOKRs();
+        }
+        catch (error) {
+            console.log('Tables not ready yet, proceeding with seed');
+        }
         if (existingTodos.length > 0 || existingOKRs.length > 0) {
             console.log('Database already has data, skipping seed');
             return;

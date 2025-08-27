@@ -55,6 +55,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
     syncData: () => ipcRenderer.invoke('webdav:syncData')
   },
 
+  // Git同步
+  git: {
+    createRepository: (config: any) => ipcRenderer.invoke('git:createRepository', config),
+    initRepository: (config: any) => ipcRenderer.invoke('git:initRepository', config),
+    testConnection: () => ipcRenderer.invoke('git:testConnection'),
+    testProxyConnection: (proxyConfig: any) => ipcRenderer.invoke('git:testProxyConnection', proxyConfig),
+    syncData: () => ipcRenderer.invoke('git:syncData'),
+    exportData: () => ipcRenderer.invoke('git:exportData'),
+    commitChanges: (message?: string) => ipcRenderer.invoke('git:commitChanges', message),
+    pushChanges: () => ipcRenderer.invoke('git:pushChanges'),
+    pullChanges: () => ipcRenderer.invoke('git:pullChanges'),
+    getStatus: () => ipcRenderer.invoke('git:getStatus')
+  },
+
+  // S3备份
+  s3: {
+    initialize: (config: any) => ipcRenderer.invoke('s3:initialize', config),
+    testConnection: () => ipcRenderer.invoke('s3:testConnection'),
+    performBackup: () => ipcRenderer.invoke('s3:performBackup'),
+    getBackupList: () => ipcRenderer.invoke('s3:getBackupList'),
+    getStatus: () => ipcRenderer.invoke('s3:getStatus'),
+    startAutoBackup: () => ipcRenderer.invoke('s3:startAutoBackup'),
+    stopAutoBackup: () => ipcRenderer.invoke('s3:stopAutoBackup'),
+    updateConfig: (config: any) => ipcRenderer.invoke('s3:updateConfig', config),
+    performRestore: (key: string, mode: string) => ipcRenderer.invoke('s3:performRestore', key, mode),
+    getBackupDetails: (key: string) => ipcRenderer.invoke('s3:getBackupDetails', key),
+  },
+
+  // 通用方法
+  invokeS3Action: (action: string, ...args: any[]) => ipcRenderer.invoke(`s3:${action}`, ...args),
+
   // 应用控制
 app: {
       quit: () => ipcRenderer.invoke('app:quit'),
@@ -108,10 +139,35 @@ declare global {
         delete: (id: number) => Promise<void>;
       };
       webdav: {
-        initClient: (config: any) => Promise<void>;
-        testConnection: () => Promise<boolean>;
-        syncData: () => Promise<void>;
+        initClient: (config: any) => Promise<{ success: boolean; error?: string }>;
+        testConnection: () => Promise<{ success: boolean; result?: boolean; error?: string }>;
+        syncData: () => Promise<{ success: boolean; data?: any; error?: string }>;
       };
+      git: {
+        createRepository: (config: any) => Promise<{ success: boolean; remoteUrl?: string; error?: string }>;
+        initRepository: (config: any) => Promise<{ success: boolean; error?: string }>;
+        testConnection: () => Promise<{ success: boolean; result?: boolean; error?: string }>;
+        testProxyConnection: (proxyConfig: any) => Promise<{ success: boolean; result?: boolean; error?: string }>;
+        syncData: () => Promise<{ success: boolean; data?: any; error?: string }>;
+        exportData: () => Promise<{ success: boolean; error?: string }>;
+        commitChanges: (message?: string) => Promise<{ success: boolean; error?: string }>;
+        pushChanges: () => Promise<{ success: boolean; error?: string }>;
+        pullChanges: () => Promise<{ success: boolean; error?: string }>;
+        getStatus: () => Promise<{ success: boolean; data?: any; error?: string }>;
+      };
+      s3: {
+        initialize: (config: any) => Promise<{ success: boolean; error?: string }>;
+        testConnection: () => Promise<{ success: boolean; result?: boolean; error?: string }>;
+        performBackup: () => Promise<{ success: boolean; error?: string }>;
+        getBackupList: () => Promise<{ success: boolean; data?: any; error?: string }>;
+        getStatus: () => Promise<{ success: boolean; data?: any; error?: string }>;
+        startAutoBackup: () => Promise<{ success: boolean; error?: string }>;
+        stopAutoBackup: () => Promise<{ success: boolean; error?: string }>;
+        updateConfig: (config: any) => Promise<{ success: boolean; error?: string }>;
+        performRestore: (key: string, mode: string) => Promise<{ success: boolean; error?: string }>;
+        getBackupDetails: (key: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+      };
+      invokeS3Action: (action: string, ...args: any[]) => Promise<{ success: boolean; data?: any; error?: string }>;
       app: {
         quit: () => Promise<void>;
         minimize: () => Promise<void>;

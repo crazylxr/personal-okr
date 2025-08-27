@@ -33,7 +33,6 @@ interface TaskFormData {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   estimated_hours?: number;
   actual_hours?: number;
-  start_date: string;
   due_date: string;
   tags: string;
   okr_id?: number;
@@ -65,7 +64,6 @@ const Tasks: React.FC = () => {
     priority: 'medium',
     estimated_hours: 1,
     actual_hours: 0,
-    start_date: '',
     due_date: '',
     tags: '',
     okr_id: undefined,
@@ -89,7 +87,6 @@ const Tasks: React.FC = () => {
     try {
       const taskData = {
         ...formData,
-        start_date: formData.start_date || null,
         due_date: formData.due_date || null,
         tags: formData.tags || ''
       };
@@ -121,7 +118,6 @@ const Tasks: React.FC = () => {
       priority: task.priority,
       estimated_hours: task.estimated_hours || 1,
       actual_hours: task.actual_hours || 0,
-      start_date: task.start_date || '',
       due_date: task.due_date || '',
       tags: task.tags || '',
       okr_id: task.okr_id,
@@ -165,7 +161,6 @@ const Tasks: React.FC = () => {
       priority: 'medium',
       estimated_hours: 1,
       actual_hours: 0,
-      start_date: '',
       due_date: '',
       tags: '',
       okr_id: undefined,
@@ -391,7 +386,7 @@ const Tasks: React.FC = () => {
           ) : (
             <div className="space-y-2">
               {filteredTasks.map((task) => {
-                const dateInfo = formatDate(task.start_date, task.due_date);
+                const dateInfo = formatDate(null, task.due_date);
                 return (
                   <Card key={task.id} className="bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-200 rounded-lg">
                     <CardContent className="p-4">
@@ -694,39 +689,18 @@ const Tasks: React.FC = () => {
               </div>
               
               <div className="space-y-4">
-                {/* 时间段选择 */}
+                {/* 截止时间选择 */}
                 <div>
-                  <Label className="text-sm font-medium mb-2 block">任务时间段</Label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="start_date" className="text-sm text-gray-600">
-                        开始时间
-                      </Label>
-                      <Input
-                        id="start_date"
-                        type="date"
-                        value={formData.start_date}
-                        onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="due_date" className="text-sm text-gray-600">
-                        截止时间
-                      </Label>
-                      <Input
-                        id="due_date"
-                        type="date"
-                        value={formData.due_date}
-                        onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                        className="mt-1"
-                        min={formData.start_date || undefined}
-                      />
-                    </div>
-                  </div>
-                  {formData.start_date && formData.due_date && formData.start_date > formData.due_date && (
-                    <p className="text-sm text-red-500 mt-1">截止时间不能早于开始时间</p>
-                  )}
+                  <Label htmlFor="due_date" className="text-sm font-medium">
+                    截止时间
+                  </Label>
+                  <Input
+                    id="due_date"
+                    type="date"
+                    value={formData.due_date}
+                    onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                    className="mt-2"
+                  />
                 </div>
                 
                 <div>

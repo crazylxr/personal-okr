@@ -63,10 +63,8 @@ class WebDAVService {
     if (!this.config) return;
     
     try {
-      const result = await window.electronAPI.webdav.initClient(this.config);
-      if (!result.success) {
-        throw new Error(result.error || 'WebDAV客户端初始化失败');
-      }
+      await window.electronAPI.webdav.initClient(this.config);
+      console.log('WebDAV客户端初始化成功');
     } catch (error) {
       console.error('初始化WebDAV客户端失败:', error);
       throw new Error('WebDAV客户端初始化失败');
@@ -76,9 +74,6 @@ class WebDAVService {
   public async testConnection(): Promise<boolean> {
     try {
       const result = await window.electronAPI.webdav.testConnection();
-      if (!result.success) {
-        throw new Error(result.error || 'WebDAV连接测试失败');
-      }
       return result.result || false;
     } catch (error) {
       console.error('WebDAV连接测试失败:', error);
@@ -89,9 +84,6 @@ class WebDAVService {
   public async syncData(localData?: SyncData): Promise<SyncData> {
     try {
       const result = await window.electronAPI.webdav.syncData();
-      if (!result.success) {
-        throw new Error(result.error || '数据同步失败');
-      }
       return result.data;
     } catch (error) {
       console.error('数据同步失败:', error);

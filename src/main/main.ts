@@ -1,9 +1,7 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen } from 'electron';
 import { join } from 'path';
 import { database } from './database';
-import { databaseService } from './services/databaseService';
-import { seedDatabase } from './seedData';
-import { mainWebDAVService, WebDAVConfig } from './services/webdavService';
+import { GitConfig } from '../types/database';
 
 const isDev = () => {
   return process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -14,15 +12,19 @@ class Application {
   private tray: Tray | null = null;
 
   constructor() {
+    console.log('Application constructor called');
     this.isDuplicateInstance();
     this.initializeApp();
   }
 
   private isDuplicateInstance(): void {
+    console.log('Checking for duplicate instance');
     const gotTheLock = app.requestSingleInstanceLock();
     if (!gotTheLock) {
+      console.log('Another instance is running, quitting');
       app.quit();
     } else {
+      console.log('Got the lock, setting up second-instance handler');
       app.on('second-instance', () => {
         if (this.mainWindow) {
           if (this.mainWindow.isMinimized()) this.mainWindow.restore();
@@ -33,21 +35,31 @@ class Application {
   }
 
   private initializeApp(): void {
+    console.log('Initializing app');
     app.whenReady().then(async () => {
-      // 初始化数据库
+      console.log('App is ready');
+      this.createWindow();
+      this.createTray();
+      
+      // 先设置 IPC 处理器
+      console.log('Setting up IPC handlers');
+      await this.setupIpcHandlers();
+      
+      // 然后初始化数据库
       try {
+        console.log('Initializing database');
         await database.init();
         console.log('Database initialized successfully');
         
         // 添加示例数据
+        const { seedDatabase } = await import('./seedData');
         await seedDatabase();
+        console.log('Seed data added successfully');
       } catch (error) {
         console.error('Failed to initialize database:', error);
       }
-
-      this.createWindow();
-      this.createTray();
-      this.setupIpcHandlers();
+    }).catch(error => {
+      console.error('App initialization failed:', error);
     });
 
     app.on('window-all-closed', async () => {
@@ -85,7 +97,7 @@ class Application {
 
     // 加载应用
     if (isDev()) {
-      this.mainWindow.loadURL('http://localhost:5173');
+      this.mainWindow.loadURL('http://localhost:5174');
       // 注释掉开发者工具，因为它会阻止 -webkit-app-region: drag 工作
       // this.mainWindow.webContents.openDevTools();
     } else {
@@ -103,8 +115,14 @@ class Application {
 
   private createTray(): void {
     // 创建系统托盘图标
-    const icon = nativeImage.createFromPath(join(__dirname, '../assets/tray-icon.png'));
-    this.tray = new Tray(icon);
+    try {
+      const iconPath = join(__dirname, '../assets/tray-icon.png');
+      const icon = nativeImage.createFromPath(iconPath);
+      this.tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
+    } catch (error) {
+      console.warn('Failed to create tray icon:', error);
+      this.tray = new Tray(nativeImage.createEmpty());
+    }
     
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -130,7 +148,13 @@ class Application {
   }
 
   // IPC handlers for database operations
-  private setupIpcHandlers(): void {
+  private async setupIpcHandlers(): Promise<void> {
+    // 动态导入服务，确保数据库已初始化
+    const { databaseService } = await import('./services/databaseService');
+    const { mainWebDAVService } = await import('./services/webdavService');
+    const { mainGitSyncService } = await import('./services/gitSyncService');
+    const { s3BackupService } = await import('./services/s3BackupService');
+
     // Todo operations
     ipcMain.handle('db:getTodos', () => databaseService.getTodos());
     ipcMain.handle('db:getTodo', (_, id: number) => databaseService.getTodo(id));
@@ -167,7 +191,7 @@ class Application {
     ipcMain.handle('db:deleteKeyResult', (_, id: number) => databaseService.deleteKeyResult(id));
 
     // WebDAV operations
-    ipcMain.handle('webdav:initClient', async (_, config: WebDAVConfig) => {
+    ipcMain.handle('webdav:initClient', async (_, config: any) => {
       try {
         await mainWebDAVService.initializeClient(config);
         return { success: true };
@@ -188,6 +212,189 @@ class Application {
     ipcMain.handle('webdav:syncData', async () => {
       try {
         const result = await mainWebDAVService.syncData();
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // Git operations
+    ipcMain.handle('git:createRepository', async (_, config: GitConfig) => {
+      try {
+        const remoteUrl = await mainGitSyncService.createRemoteRepository(config);
+        return { success: true, remoteUrl };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+    
+    ipcMain.handle('git:initRepository', async (_, config: GitConfig) => {
+      try {
+        await mainGitSyncService.initializeRepository(config);
+        mainGitSyncService.updateConfig(config);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+    
+    ipcMain.handle('git:testConnection', async () => {
+      try {
+        const result = await mainGitSyncService.testConnection();
+        return { success: true, result };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+    
+    ipcMain.handle('git:syncData', async () => {
+      try {
+        const result = await mainGitSyncService.syncData();
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+    
+    ipcMain.handle('git:exportData', async () => {
+      try {
+        await mainGitSyncService.exportData();
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+    
+    ipcMain.handle('git:commitChanges', async (_, message?: string) => {
+      try {
+        await mainGitSyncService.commitChanges(message);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+    
+    ipcMain.handle('git:pushChanges', async () => {
+      try {
+        await mainGitSyncService.pushChanges();
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+    
+    ipcMain.handle('git:pullChanges', async () => {
+      try {
+        await mainGitSyncService.pullChanges();
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+    
+    ipcMain.handle('git:getStatus', async () => {
+      try {
+        const result = await mainGitSyncService.getStatus();
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+    
+    ipcMain.handle('git:testProxyConnection', async (_, proxyConfig: NonNullable<GitConfig['proxy']>) => {
+      try {
+        const result = await mainGitSyncService.testProxyConnection(proxyConfig);
+        return { success: true, result };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // S3 backup operations
+    ipcMain.handle('s3:initialize', async (_, config: any) => {
+      try {
+        await s3BackupService.initialize(config);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('s3:testConnection', async () => {
+      try {
+        const result = await s3BackupService.testConnection();
+        return { success: true, result };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('s3:performBackup', async () => {
+      try {
+        await s3BackupService.performBackup();
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('s3:getBackupList', async () => {
+      try {
+        const result = await s3BackupService.getBackupList();
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('s3:getStatus', async () => {
+      try {
+        const result = await s3BackupService.getStatus();
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('s3:startAutoBackup', async () => {
+      try {
+        s3BackupService.startAutoBackup();
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('s3:stopAutoBackup', async () => {
+      try {
+        s3BackupService.stopAutoBackup();
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('s3:updateConfig', async (_, config: any) => {
+      try {
+        s3BackupService.updateConfig(config);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('s3:performRestore', async (_, key: string, mode: string) => {
+      try {
+        await s3BackupService.performRestore(key, mode as 'database' | 'json' | 'merge');
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('s3:getBackupDetails', async (_, key: string) => {
+      try {
+        const result = await s3BackupService.getBackupDetails(key);
         return { success: true, data: result };
       } catch (error) {
         return { success: false, error: (error as Error).message };

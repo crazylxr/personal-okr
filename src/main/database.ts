@@ -2,22 +2,65 @@ import sqlite3 from 'sqlite3';
 import path from 'path';
 import { app } from 'electron';
 
-const isDev = process.env.NODE_ENV === 'development';
-const dbPath = isDev 
-  ? path.join(process.cwd(), 'data.db')
-  : path.join(app.getPath('userData'), 'data.db');
+// 云端数据库配置
+const CLOUD_DB_ENABLED = process.env.CLOUD_DB_ENABLED === 'true';
+
+let dbPath: string;
+
+if (CLOUD_DB_ENABLED) {
+  // 使用云端数据库
+  const isDev = process.env.NODE_ENV === 'development';
+  dbPath = isDev 
+    ? path.join(process.cwd(), 'cloud_data.db')
+    : path.join(app.getPath('userData'), 'cloud_data.db');
+} else {
+  // 使用本地数据库
+  const isDev = process.env.NODE_ENV === 'development';
+  dbPath = isDev 
+    ? path.join(process.cwd(), 'data.db')
+    : path.join(app.getPath('userData'), 'data.db');
+}
 
 class Database {
   private db: sqlite3.Database | null = null;
 
   async init(): Promise<void> {
+    // 如果启用云端数据库，先下载云端数据库
+    if (CLOUD_DB_ENABLED) {
+      try {
+        const { cloudDatabaseService } = await import('./services/cloudDatabaseService');
+        
+        // 配置云端数据库连接
+        const cloudConfig = {
+          host: process.env.CLOUD_DB_HOST || 'your_server_ip',
+          port: parseInt(process.env.CLOUD_DB_PORT || '22'),
+          username: process.env.CLOUD_DB_USER || 'your_username',
+          password: process.env.CLOUD_DB_PASSWORD || 'your_password',
+          privateKey: process.env.CLOUD_DB_PRIVATE_KEY, // 可选，SSH 密钥路径
+          remotePath: process.env.CLOUD_DB_REMOTE_PATH || '~/personal-okr-manager/data.db'
+        };
+        
+        await cloudDatabaseService.init(cloudConfig);
+        
+        // 下载云端数据库
+        const downloaded = await cloudDatabaseService.downloadDatabase();
+        if (downloaded) {
+          console.log('成功下载云端数据库');
+        } else {
+          console.log('云端数据库不存在，将创建新的');
+        }
+      } catch (error) {
+        console.error('云端数据库初始化失败，使用本地数据库:', error);
+      }
+    }
+
     return new Promise((resolve, reject) => {
       this.db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
           console.error('Error opening database:', err);
           reject(err);
         } else {
-          console.log('Connected to SQLite database');
+          console.log('Connected to SQLite database:', dbPath);
           this.createTables().then(resolve).catch(reject);
         }
       });
@@ -26,80 +69,93 @@ class Database {
 
   private async createTables(): Promise<void> {
     const tables = [
-      // Todos表
-      `CREATE TABLE IF NOT EXISTS todos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT,
-        priority TEXT CHECK(priority IN ('low', 'medium', 'high')) DEFAULT 'medium',
-        status TEXT CHECK(status IN ('pending', 'in_progress', 'completed')) DEFAULT 'pending',
-        due_date TEXT,
-        tags TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )`,
-      
-      // OKRs表
-      `CREATE TABLE IF NOT EXISTS okrs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT,
-        quarter TEXT NOT NULL,
-        year INTEGER NOT NULL,
-        progress INTEGER DEFAULT 0 CHECK(progress >= 0 AND progress <= 100),
-        status TEXT CHECK(status IN ('draft', 'active', 'completed', 'cancelled')) DEFAULT 'draft',
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )`,
-      
-      // KeyResults表（OKR的关键结果）
-      `CREATE TABLE IF NOT EXISTS key_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        okr_id INTEGER NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT,
-        target_value REAL NOT NULL DEFAULT 0,
-        current_value REAL DEFAULT 0,
-        unit TEXT NOT NULL DEFAULT '',
-        progress INTEGER DEFAULT 0 CHECK(progress >= 0 AND progress <= 100),
-        status TEXT CHECK(status IN ('not_started', 'in_progress', 'completed', 'at_risk')) DEFAULT 'not_started',
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (okr_id) REFERENCES okrs (id) ON DELETE CASCADE
-      )`,
-      
-      // Tasks表（关联到OKR或KeyResult的具体任务）
-      `CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        okr_id INTEGER,
-        kr_id INTEGER,
-        title TEXT NOT NULL,
-        description TEXT,
-        priority TEXT CHECK(priority IN ('low', 'medium', 'high', 'urgent')) DEFAULT 'medium',
-        estimated_hours REAL DEFAULT 0,
-        actual_hours REAL DEFAULT 0,
-        status TEXT CHECK(status IN ('todo', 'in_progress', 'completed', 'cancelled')) DEFAULT 'todo',
-        due_date TEXT,
-        tags TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (okr_id) REFERENCES okrs (id) ON DELETE CASCADE,
-        FOREIGN KEY (kr_id) REFERENCES key_results (id) ON DELETE CASCADE
-      )`,
-      
-      // Notes表
-      `CREATE TABLE IF NOT EXISTS notes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        content TEXT,
-        tags TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )`
+      {
+        name: 'todos',
+        sql: `CREATE TABLE IF NOT EXISTS todos (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT,
+          priority TEXT CHECK(priority IN ('low', 'medium', 'high')) DEFAULT 'medium',
+          status TEXT CHECK(status IN ('pending', 'in_progress', 'completed')) DEFAULT 'pending',
+          due_date TEXT,
+          tags TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )`
+      },
+      {
+        name: 'okrs',
+        sql: `CREATE TABLE IF NOT EXISTS okrs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT,
+          quarter TEXT NOT NULL,
+          year INTEGER NOT NULL,
+          progress INTEGER DEFAULT 0 CHECK(progress >= 0 AND progress <= 100),
+          status TEXT CHECK(status IN ('draft', 'active', 'completed', 'cancelled')) DEFAULT 'draft',
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )`
+      },
+      {
+        name: 'key_results',
+        sql: `CREATE TABLE IF NOT EXISTS key_results (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          okr_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          target_value REAL NOT NULL DEFAULT 0,
+          current_value REAL DEFAULT 0,
+          unit TEXT NOT NULL DEFAULT '',
+          progress INTEGER DEFAULT 0 CHECK(progress >= 0 AND progress <= 100),
+          status TEXT CHECK(status IN ('not_started', 'in_progress', 'completed', 'at_risk')) DEFAULT 'not_started',
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (okr_id) REFERENCES okrs (id) ON DELETE CASCADE
+        )`
+      },
+      {
+        name: 'tasks',
+        sql: `CREATE TABLE IF NOT EXISTS tasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          okr_id INTEGER,
+          kr_id INTEGER,
+          title TEXT NOT NULL,
+          description TEXT,
+          priority TEXT CHECK(priority IN ('low', 'medium', 'high', 'urgent')) DEFAULT 'medium',
+          estimated_hours REAL DEFAULT 0,
+          actual_hours REAL DEFAULT 0,
+          status TEXT CHECK(status IN ('todo', 'in_progress', 'completed', 'cancelled')) DEFAULT 'todo',
+          due_date TEXT,
+          tags TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (okr_id) REFERENCES okrs (id) ON DELETE CASCADE,
+          FOREIGN KEY (kr_id) REFERENCES key_results (id) ON DELETE CASCADE
+        )`
+      },
+      {
+        name: 'notes',
+        sql: `CREATE TABLE IF NOT EXISTS notes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          content TEXT,
+          tags TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )`
+      }
     ];
 
     for (const table of tables) {
-      await this.run(table);
+      try {
+        console.log(`Creating table: ${table.name}`);
+        await this.run(table.sql);
+        console.log(`Table ${table.name} created successfully`);
+      } catch (error) {
+        console.error(`Failed to create table ${table.name}:`, error);
+        throw error;
+      }
     }
 
     // 创建索引
@@ -172,6 +228,18 @@ class Database {
   }
 
   async close(): Promise<void> {
+    // 如果启用云端数据库，先同步到云端
+    if (CLOUD_DB_ENABLED) {
+      try {
+        const { cloudDatabaseService } = await import('./services/cloudDatabaseService');
+        await cloudDatabaseService.uploadDatabase();
+        console.log('数据库已同步到云端');
+        await cloudDatabaseService.close();
+      } catch (error) {
+        console.error('云端数据库同步失败:', error);
+      }
+    }
+
     return new Promise((resolve, reject) => {
       if (!this.db) {
         resolve();
